@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi Chain Auto Withdraw Bot</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>Auto Withdraw Dashboard</h1>
+      <p>Mobile Friendly Multi Chain Panel</p>
+    </div>
+
+    <div class="card">
+
+      <label>Chain Select</label>
+   <select id="chain">
+  <option value="ethereum">Ethereum (ETH)</option>
+  <option value="bsc">Binance Smart Chain (BSC)</option>
+  <option value="polygon">Polygon</option>
+  <option value="arbitrum">Arbitrum</option>
+  <option value="optimism">Optimism</option>
+  <option value="base">Base</option>
+  <option value="tron">TRON</option>
+  <option value="solana">Solana (SOL)</option>
+</select>
+
+      <label>Sender Wallet Secret</label>
+      <input
+        type="password"
+        id="senderSecret"
+        placeholder="Enter sender wallet secret"
+      />
+
+      <button id="detectBtn">Detect Balance</button>
+
+      <div class="balance-box">
+        <div class="section-title">Detected Balances</div>
+        <div id="balances">
+          No balance detected
+        </div>
+      </div>
+
+      <label>Select Asset</label>
+      <select id="assetSelect">
+        <option value="">Select Asset</option>
+      </select>
+
+      <label>Amount Mode</label>
+      <select id="amountMode">
+        <option value="all">Full Balance</option>
+        <option value="fixed">Fixed Amount</option>
+        <option value="threshold">Threshold</option>
+      </select>
+
+      <input
+        type="text"
+        id="amountInput"
+        placeholder="Enter amount / threshold"
+      />
+
+      <label>Receiver Address</label>
+      <input
+        type="text"
+        id="receiverAddress"
+        placeholder="Enter receiver wallet address"
+      />
+
+      <label>Fee Mode</label>
+      <div class="radio-group">
+        <label class="radio-item">
+          <input type="radio" name="feeMode" value="sender" checked />
+          Sender Fee
+        </label>
+
+        <label class="radio-item">
+          <input type="radio" name="feeMode" value="sponsor" />
+          Sponsor Fee
+        </label>
+      </div>
+
+      <div id="sponsorSection" class="hidden">
+        <label>Sponsor Wallet Secret</label>
+        <input
+          type="password"
+          id="sponsorSecret"
+          placeholder="Enter sponsor wallet secret"
+        />
+      </div>
+
+      <label>Auto Retry</label>
+      <div class="toggle-row">
+        <input type="checkbox" id="autoRetry" checked />
+        <span>Enable Auto Retry</span>
+      </div>
+
+      <label>Retry Attempts</label>
+      <input type="number" id="retryAttempts" value="5" />
+
+      <label>Retry Delay (Seconds)</label>
+      <input type="number" id="retryDelay" value="3" />
+
+      <label>Monitoring Interval (Seconds)</label>
+      <input type="number" id="monitorInterval" value="10" />
+
+      <button id="startBtn" class="start-btn">
+        START AUTO MONITORING
+      </button>
+
+      <div class="logs-box">
+        <div class="section-title">Transaction Logs</div>
+        <div id="logs">
+          Waiting...
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
