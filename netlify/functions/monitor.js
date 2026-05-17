@@ -1,6 +1,5 @@
 const { ethers } = require("ethers");
 const TronWeb = require("tronweb");
-const solanaWeb3 = require("@solana/web3.js");
 
 const RPCS = {
   ethereum: "https://rpc.ankr.com/eth",
@@ -9,8 +8,7 @@ const RPCS = {
   arbitrum: "https://rpc.ankr.com/arbitrum",
   optimism: "https://rpc.ankr.com/optimism",
   base: "https://rpc.ankr.com/base",
-  tron: "https://api.trongrid.io",
-  solana: "https://api.mainnet-beta.solana.com"
+  tron: "https://api.trongrid.io"
 };
 
 exports.handler = async (event) => {
@@ -18,107 +16,72 @@ exports.handler = async (event) => {
     const body = JSON.parse(event.body);
     const { chain, senderSecret } = body;
 
-    if (!chain || !senderSecret) {
-      return response(false, "Missing chain or sender secret");
-    }
-
-    // EVM chains
     if (
-      [
-        "ethereum",
-        "bsc",
-        "polygon",
-        "arbitrum",
-        "optimism",
-        "base"
-      ].includes(chain)
+      ["ethereum","bsc","polygon","arbitrum","optimism","base"].includes(chain)
     ) {
       const provider = new ethers.JsonRpcProvider(RPCS[chain]);
       const wallet = new ethers.Wallet(senderSecret, provider);
+      const bal = await provider.getBalance(wallet.address);
 
-      const nativeBalance = await provider.getBalance(wallet.address);
-
-      const balances = [
+      return ok([
         {
-          symbol: getNativeSymbol(chain),
-          balance: ethers.formatEther(nativeBalance)
+          symbol: getSymbol(chain),
+          balance: ethers.formatEther(bal)
         }
-      ];
-
-      return response(true, "Balance detected", balances);
+      ]);
     }
 
-    // TRON
     if (chain === "tron") {
       const tronWeb = new TronWeb({
         fullHost: RPCS.tron,
         privateKey: senderSecret
       });
 
-      const address = tronWeb.address.fromPrivateKey(senderSecret);
+      const addr = tronWeb.address.fromPrivateKey(senderSecret);
+      const bal = await tronWeb.trx.getBalance(addr);
 
-      const trxBalance = await tronWeb.trx.getBalance(address);
-
-      return response(true, "Balance detected", [
+      return ok([
         {
           symbol: "TRX",
-          balance: trxBalance / 1000000
+          balance: bal / 1000000
         }
       ]);
     }
 
-    // SOLANA
-    if (chain === "solana") {
-      const connection = new solanaWeb3.Connection(
-        RPCS.solana,
-        "confirmed"
-      );
+    return fail("Unsupported chain");
 
-      const secretArray = JSON.parse(senderSecret);
-
-      const keypair = solanaWeb3.Keypair.fromSecretKey(
-        Uint8Array.from(secretArray)
-      );
-
-      const balance = await connection.getBalance(
-        keypair.publicKey
-      );
-
-      return response(true, "Balance detected", [
-        {
-          symbol: "SOL",
-          balance: balance / 1000000000
-        }
-      ]);
-    }
-
-    return response(false, "Unsupported chain");
-
-  } catch (err) {
-    return response(false, err.message);
+  } catch (e) {
+    return fail(e.message);
   }
 };
 
-function response(success, message, balances = []) {
+function ok(balances) {
   return {
     statusCode: 200,
     body: JSON.stringify({
-      success,
-      message,
+      success: true,
       balances
     })
   };
 }
 
-function getNativeSymbol(chain) {
-  const map = {
+function fail(msg) {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      success: false,
+      message: msg
+    })
+  };
+}
+
+function getSymbol(chain) {
+  return {
     ethereum: "ETH",
     bsc: "BNB",
     polygon: "MATIC",
     arbitrum: "ETH",
     optimism: "ETH",
     base: "ETH"
-  };
-
-  return map[chain] || "NATIVE";
+  }[chain];
 }
