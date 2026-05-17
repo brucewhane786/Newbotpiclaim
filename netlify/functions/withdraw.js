@@ -1,6 +1,5 @@
 const { ethers } = require("ethers");
 const TronWeb = require("tronweb");
-const solanaWeb3 = require("@solana/web3.js");
 
 const RPCS = {
   ethereum: "https://rpc.ankr.com/eth",
@@ -9,8 +8,7 @@ const RPCS = {
   arbitrum: "https://rpc.ankr.com/arbitrum",
   optimism: "https://rpc.ankr.com/optimism",
   base: "https://rpc.ankr.com/base",
-  tron: "https://api.trongrid.io",
-  solana: "https://api.mainnet-beta.solana.com"
+  tron: "https://api.trongrid.io"
 };
 
 exports.handler = async (event) => {
@@ -30,234 +28,100 @@ exports.handler = async (event) => {
       retryDelay
     } = body;
 
-    if (!chain || !senderSecret || !receiverAddress) {
-      return response(false, "Missing required fields");
-    }
-
     let tries = autoRetry ? parseInt(retryAttempts || 1) : 1;
     let delay = parseInt(retryDelay || 3) * 1000;
     let lastError = null;
 
     for (let i = 0; i < tries; i++) {
       try {
-        // EVM CHAINS
         if (
-          [
-            "ethereum",
-            "bsc",
-            "polygon",
-            "arbitrum",
-            "optimism",
-            "base"
-          ].includes(chain)
+          ["ethereum","bsc","polygon","arbitrum","optimism","base"].includes(chain)
         ) {
           const provider = new ethers.JsonRpcProvider(RPCS[chain]);
+          const senderWallet = new ethers.Wallet(senderSecret, provider);
 
-          const senderWallet = new ethers.Wallet(
-            senderSecret,
-            provider
-          );
+          const balance = await provider.getBalance(senderWallet.address);
 
-          let txSigner = senderWallet;
-
-          if (
-            feeMode === "sponsor" &&
-            sponsorSecret
-          ) {
-            txSigner = new ethers.Wallet(
-              sponsorSecret,
-              provider
-            );
-          }
-
-          const senderBalance = await provider.getBalance(
-            senderWallet.address
-          );
-
-          let sendAmount = senderBalance;
+          let amount = balance;
 
           if (amountMode === "fixed") {
-            sendAmount = ethers.parseEther(
-              amountInput || "0"
-            );
+            amount = ethers.parseEther(amountInput || "0");
           }
 
           if (amountMode === "threshold") {
-            const threshold = ethers.parseEther(
-              amountInput || "0"
-            );
+            const threshold = ethers.parseEther(amountInput || "0");
 
-            if (senderBalance < threshold) {
-              return response(
-                false,
-                "Threshold not reached"
-              );
+            if (balance < threshold) {
+              return ok("Threshold not reached");
             }
           }
 
-          const gasPrice =
-            await provider.getFeeData();
-
-          const tx = await txSigner.sendTransaction({
+          const tx = await senderWallet.sendTransaction({
             to: receiverAddress,
-            value: sendAmount,
-            gasPrice: gasPrice.gasPrice
+            value: amount
           });
 
           await tx.wait();
 
-          return response(
-            true,
-            "Withdraw successful",
-            tx.hash
-          );
+          return success(tx.hash);
         }
 
-        // TRON
         if (chain === "tron") {
           const tronWeb = new TronWeb({
             fullHost: RPCS.tron,
             privateKey: senderSecret
           });
 
-          const senderAddress =
-            tronWeb.address.fromPrivateKey(
-              senderSecret
-            );
-
-          const balance =
-            await tronWeb.trx.getBalance(
-              senderAddress
-            );
-
-          let sendAmount = balance;
-
-          if (amountMode === "fixed") {
-            sendAmount =
-              parseFloat(amountInput) * 1000000;
-          }
-
-          if (amountMode === "threshold") {
-            const threshold =
-              parseFloat(amountInput) * 1000000;
-
-            if (balance < threshold) {
-              return response(
-                false,
-                "Threshold not reached"
-              );
-            }
-          }
-
-          const tx =
-            await tronWeb.trx.sendTransaction(
-              receiverAddress,
-              sendAmount
-            );
-
-          return response(
-            true,
-            "TRON withdraw success",
-            tx.txid
+          const tx = await tronWeb.trx.sendTransaction(
+            receiverAddress,
+            1000000
           );
+
+          return success(tx.txid);
         }
 
-        // SOLANA
-        if (chain === "solana") {
-          const connection =
-            new solanaWeb3.Connection(
-              RPCS.solana,
-              "confirmed"
-            );
-
-          const secretArray =
-            JSON.parse(senderSecret);
-
-          const senderKeypair =
-            solanaWeb3.Keypair.fromSecretKey(
-              Uint8Array.from(secretArray)
-            );
-
-          const balance =
-            await connection.getBalance(
-              senderKeypair.publicKey
-            );
-
-          let sendAmount = balance;
-
-          if (amountMode === "fixed") {
-            sendAmount =
-              parseFloat(amountInput) * 1000000000;
-          }
-
-          if (amountMode === "threshold") {
-            const threshold =
-              parseFloat(amountInput) * 1000000000;
-
-            if (balance < threshold) {
-              return response(
-                false,
-                "Threshold not reached"
-              );
-            }
-          }
-
-          const tx =
-            new solanaWeb3.Transaction().add(
-              solanaWeb3.SystemProgram.transfer({
-                fromPubkey:
-                  senderKeypair.publicKey,
-                toPubkey:
-                  new solanaWeb3.PublicKey(
-                    receiverAddress
-                  ),
-                lamports: sendAmount
-              })
-            );
-
-          const sig =
-            await solanaWeb3.sendAndConfirmTransaction(
-              connection,
-              tx,
-              [senderKeypair]
-            );
-
-          return response(
-            true,
-            "SOL withdraw success",
-            sig
-          );
-        }
-
-      } catch (err) {
-        lastError = err.message;
+      } catch (e) {
+        lastError = e.message;
 
         if (i < tries - 1) {
-          await wait(delay);
+          await new Promise(r => setTimeout(r, delay));
         }
       }
     }
 
-    return response(false, lastError);
+    return fail(lastError);
 
-  } catch (err) {
-    return response(false, err.message);
+  } catch (e) {
+    return fail(e.message);
   }
 };
 
-function wait(ms) {
-  return new Promise((resolve) =>
-    setTimeout(resolve, ms)
-  );
-}
-
-function response(success, message, txHash = null) {
+function success(hash) {
   return {
     statusCode: 200,
     body: JSON.stringify({
-      success,
-      message,
-      txHash
+      success: true,
+      txHash: hash
+    })
+  };
+}
+
+function fail(msg) {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      success: false,
+      message: msg
+    })
+  };
+}
+
+function ok(msg) {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      success: false,
+      message: msg
     })
   };
 }
